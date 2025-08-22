@@ -1,0 +1,60 @@
+name: MLB newsletter
+
+on:
+  workflow_dispatch: {}   # manual trigger
+  schedule:
+    # Runs daily at 22:00 MYT (14:00 UTC)
+    - cron: "0 14 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlb-newsletter
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production   # use your environment secrets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build & send newsletter
+        env:
+          # Environment secrets
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NEWS_RECIPIENTS: ${{ secrets.NEWS_RECIPIENTS }}
+
+          # Repo variables
+          MLB_SEASON: ${{ vars.MLB_SEASON }}
+          CONTENDER_GB: ${{ vars.CONTENDER_GB }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          FLM_HOURS_WINDOW: ${{ vars.FLM_HOURS_WINDOW }}
+          FLM_MAX_LINKS: ${{ vars.FLM_MAX_LINKS }}
+          VERBOSE: ${{ vars.VERBOSE }}
+          OPENAI_MIN_INTERVAL_SEC: ${{ vars.OPENAI_MIN_INTERVAL_SEC }}
+
+        run: python main.py
+
+      - name: Upload preview if email not sent
+        if: ${{ hashFiles('newsletter_preview.html') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsletter_preview
+          path: newsletter_preview.html
