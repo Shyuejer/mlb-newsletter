@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 640px; margin: auto; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 24px; }
+    .game-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .time { font-size: 13px; color: #666; margin-bottom: 6px; }
+    .matchup { font-weight: bold; font-size: 16px; margin-bottom: 6px; }
+    .pitchers { font-size: 14px; color: #444; margin-bottom: 8px; }
+    .badge {
+      display: inline-block;
+      background: #ffefef;
+      color: #d33;
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 4px;
+      margin-right: 6px;
+      margin-bottom: 8px;
+    }
+    .narrative { font-size: 14px; line-height: 1.4; }
+    .section-title { margin-top: 28px; margin-bottom: 12px; font-size: 18px; border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+    .other { background: #fafafa; }
+    .time-code { background: #eee; padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MLB Daily Newsletter – {{ target_date }}</h1>
+
+    <div class="section-title">Contender Watch</div>
+    {% if contender_games %}
+      {% for g in contender_games %}
+      <div class="game-card">
+        <div class="time">
+          <strong>{{ g.myt_time_str or "TBD" }}</strong>
+        </div>
+
+        <div class="matchup">
+          {% set away_team = g.away_name or g.away %}
+          {% set home_team = g.home_name or g.home %}
+          {{ away_team }}{% if g.away_record %} ({{ g.away_record }}){% endif %} @
+          {{ home_team }}{% if g.home_record %} ({{ g.home_record }}){% endif %}
+        </div>
+
+        <div class="pitchers">
+          {{ g.away_pitcher or "TBD" }} (ERA {{ g.away_era or "—" }}, WHIP {{ g.away_whip or "—" }})
+          vs
+          {{ g.home_pitcher or "TBD" }} (ERA {{ g.home_era or "—" }}, WHIP {{ g.home_whip or "—" }})
+        </div>
+        <div>
+          <span class="badge">🔥 Contender watch</span>
+          {% if g.same_division %}
+            <span class="badge">⚔️ Division clash</span>
+          {% elif g.same_league %}
+            <span class="badge">🏟️ League rivals</span>
+          {% endif %}
+        </div>
+        <div class="narrative">{{ g.narrative or "—" }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p>No contender matchups today.</p>
+    {% endif %}
+
+<div class="section-title">Other Games</div>
+{% if other_games %}
+  {% for g in other_games %}
+  <div class="game-card other">
+    <div class="time">
+      <strong>{{ g.myt_time_str or "TBD" }}</strong>
+    </div>
+
+    <div class="matchup">
+      {% set away_team = g.away_name or g.away %}
+      {% set home_team = g.home_name or g.home %}
+      {{ away_team }}{% if g.away_record %} ({{ g.away_record }}){% endif %} @
+      {{ home_team }}{% if g.home_record %} ({{ g.home_record }}){% endif %}
+    </div>
+
+    <div class="pitchers">
+      {{ g.away_pitcher or "TBD" }} (ERA {{ g.away_era or "—" }}, WHIP {{ g.away_whip or "—" }})
+      vs
+      {{ g.home_pitcher or "TBD" }} (ERA {{ g.home_era or "—" }}, WHIP {{ g.home_whip or "—" }})
+    </div>
+
+    {% if g.same_division %}
+      <div><span class="badge">⚔️ Division clash</span></div>
+    {% elif g.same_league %}
+      <div><span class="badge">🏟️ League rivals</span></div>
+    {% endif %}
+
+    <div class="narrative">{{ g.narrative or "—" }}</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p>No other games scheduled.</p>
+{% endif %}
+
+  </div>
+</body>
+</html>

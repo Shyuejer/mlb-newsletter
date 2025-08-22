@@ -1,0 +1,27 @@
+# --- Python / tooling ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.build/
+dist/
+.venv/
+venv*/
+ENV*/
+.python-version
+.pytest_cache/
+.coverage
+.cache/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Project artifacts ---
+newsletter_preview.html
+
+# --- Secrets / config ---
+.env
+.env.*
