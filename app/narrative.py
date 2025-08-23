@@ -22,6 +22,7 @@ def _summarize_text(
     Uses gpt-4o for contender games, gpt-4o-mini otherwise.
     """
     api = os.getenv("OPENAI_API_KEY")
+    print(f"[DEBUG] OPENAI_API_KEY present? {'yes' if api else 'no'}")
     if api:
         try:
             client = OpenAI(api_key=api)
@@ -199,6 +200,7 @@ def _safe_chat_completion(client, **kwargs):
             _throttle_openai()
             return client.chat.completions.create(**kwargs)
         except Exception as e:
+            print(f"[WARN] OpenAI call failed: {e}")
             msg = str(e)
             last_err = e
             if "429" in msg or "rate limit" in msg.lower():
