@@ -3,13 +3,13 @@ import os
 import time
 import random
 from openai import OpenAI
+import openai
 import re
 from app.teams import TEAMS, ALIAS_TO_FULL, FULL_TO_ALIASES
 
 # --- Global OpenAI throttle ---
 _LAST_OPENAI_CALL_TS = 0.0
 _MIN_INTERVAL = float(os.getenv("OPENAI_MIN_INTERVAL_SEC", "8"))  # seconds
-
 
 def _summarize_text(
     text: str,
@@ -24,7 +24,7 @@ def _summarize_text(
     api = os.getenv("OPENAI_API_KEY")
     if api:
         try:
-            client = OpenAI(api_key=api)
+            openai.api_key = api
             t1, t2 = matchup_hint
             hint = f"This article is about {t1} vs {t2}. Keep the preview focused on that matchup.\n\n" if t1 and t2 else ""
             prompt = (
@@ -39,7 +39,6 @@ def _summarize_text(
             model_choice = "gpt-4o-mini"
 
             resp = _safe_chat_completion(
-                client,
                 model=model_choice,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=120,
@@ -150,15 +149,14 @@ def _throttle_openai():
     _LAST_OPENAI_CALL_TS = time.time()
 
 
-def _safe_chat_completion(client, **kwargs):
-    """Wraps client.chat.completions.create with retries + throttle."""
+def _safe_chat_completion(**kwargs):
     retries = 5
     backoff = 2.0
     last_err = None
     for attempt in range(1, retries + 1):
         try:
             _throttle_openai()
-            return client.chat.completions.create(**kwargs)
+            return openai.chat.completions.create(**kwargs)
         except Exception as e:
             msg = str(e)
             last_err = e
@@ -170,6 +168,7 @@ def _safe_chat_completion(client, **kwargs):
                 continue
             raise
     raise RuntimeError(f"OpenAI call failed after retries: {last_err}")
+
 
 
 # --- Utilities ---
