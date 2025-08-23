@@ -22,7 +22,6 @@ def _summarize_text(
     Uses gpt-4o for contender games, gpt-4o-mini otherwise.
     """
     api = os.getenv("OPENAI_API_KEY")
-    print(f"[DEBUG] OPENAI_API_KEY present? {'yes' if api else 'no'}")
     if api:
         try:
             client = OpenAI(api_key=api)
@@ -36,9 +35,8 @@ def _summarize_text(
                 f"Text:\n{text[:1500]}"
             )
 
-            # model choice: contenders get gpt-4o, others gpt-4o-mini
-            model_choice = "gpt-4o" if contender else os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-            print(f"[DEBUG] Using {model_choice} for {'contender' if contender else 'non-contender'} game")
+            # ✅ Distinguish models by contender flag
+            model_choice = "gpt-4o-mini"
 
             resp = _safe_chat_completion(
                 client,
@@ -58,10 +56,7 @@ def _summarize_text(
 
 
 def _match_title_to_game(title: str, away: str, home: str) -> bool:
-    """
-    Check if article title matches the away vs home matchup.
-    Loosened logic to catch abbreviations and 'vs' formats.
-    """
+    """Check if article title matches the away vs home matchup."""
     t = title.lower()
     away_key = away.split()[-1].lower()
     home_key = home.split()[-1].lower()
@@ -73,72 +68,45 @@ def _match_title_to_game(title: str, away: str, home: str) -> bool:
     )
 
 
-# ---------- NEW: always-on fallback commentary ----------
 def _fallback_narrative(g: dict) -> str:
-    """
-    Build a short, deterministic 1–2 sentence preview from available fields,
-    so even non-contender games (or games without FLM articles) get commentary.
-    """
+    """Build a deterministic 1–2 sentence preview from available fields."""
     away = g.get("away_name") or g.get("away") or "Away"
     home = g.get("home_name") or g.get("home") or "Home"
     ar = g.get("away_record") or "—"
     hr = g.get("home_record") or "—"
-
     ap = g.get("away_pitcher") or "TBD"
     hp = g.get("home_pitcher") or "TBD"
     aera = g.get("away_era") or "—"
     awhip = g.get("away_whip") or "—"
     hera = g.get("home_era") or "—"
     hwhip = g.get("home_whip") or "—"
-
     when = g.get("myt_time_str") or "TBD"
     tag = "division clash" if g.get("same_division") else ("league matchup" if g.get("same_league") else "interleague")
-
-    # sentence 1: stakes/context
     s1 = f"{away} ({ar}) visit {home} ({hr}) in a {tag}; first pitch {when}."
-
-    # sentence 2: probables
     s2 = f"Probables: {ap} (ERA {aera}, WHIP {awhip}) vs {hp} (ERA {hera}, WHIP {hwhip})."
-
     return f"{s1} {s2}"
 
 
 def match_and_summarize(games: list[dict], flm_articles: list[dict]) -> int:
-    """
-    For each game, try to find an FLM article and attach 'narrative' + 'source'.
-    Pass a matchup hint into OpenAI to reduce drift.
-    Always attach a fallback narrative when no article is matched.
-    Returns the number of games with an FLM match.
-    """
-    # Pre-index articles with detected teams from title + first 2 paragraphs
+    """Attach narratives from FLM/OpenAI or fallback for each game."""
     indexed = []
     for art in flm_articles:
         title = art.get("title") or ""
         body = art.get("body") or ""
         first2 = _first_two_paras(body)
         t1, t2 = _top_two_teams(title, first2)
-        indexed.append({
-            "title": title,
-            "url": art.get("url"),
-            "body": body,
-            "t1": t1,
-            "t2": t2,
-        })
+        indexed.append({"title": title, "url": art.get("url"), "body": body, "t1": t1, "t2": t2})
 
     matched = 0
-
     for g in games:
         away = g.get("away_name", "") or g.get("away", "") or ""
         home = g.get("home_name", "") or g.get("home", "") or ""
-
-        # 1) strict title match
         picked = None
+
         for art in indexed:
             if _match_title_to_game(art["title"], away, home):
                 picked = art
                 break
-
-        # 2) canonical-name set match
         if not picked:
             g_home_full = _guess_full_from_name(home)
             g_away_full = _guess_full_from_name(away)
@@ -147,8 +115,6 @@ def match_and_summarize(games: list[dict], flm_articles: list[dict]) -> int:
                 if a and b and g_home_full and g_away_full and {a, b} == {g_home_full, g_away_full}:
                     picked = art
                     break
-
-        # 3) loose single-team title fallback
         if not picked:
             for art in indexed:
                 t = art["title"].lower()
@@ -156,14 +122,13 @@ def match_and_summarize(games: list[dict], flm_articles: list[dict]) -> int:
                     picked = art
                     break
 
-        # Summarize or fallback
         if picked:
             hint = (picked.get("t1"), picked.get("t2"))
             narrative = _summarize_text(
                 picked.get("body", ""),
                 picked.get("title"),
                 hint,
-                contender=g.get("is_contender", False),
+                contender=g.get("is_contender", False),  # ✅ pass flag here
             )
             g["narrative"] = narrative or _fallback_narrative(g)
             g["source"] = picked.get("url")
@@ -186,21 +151,15 @@ def _throttle_openai():
 
 
 def _safe_chat_completion(client, **kwargs):
-    """
-    Wraps client.chat.completions.create with:
-      - pre-call throttle (1 call every _MIN_INTERVAL seconds)
-      - light exponential backoff + jitter on HTTP 429
-    """
+    """Wraps client.chat.completions.create with retries + throttle."""
     retries = 5
-    backoff = 2.0  # seconds
+    backoff = 2.0
     last_err = None
-
     for attempt in range(1, retries + 1):
         try:
             _throttle_openai()
             return client.chat.completions.create(**kwargs)
         except Exception as e:
-            print(f"[WARN] OpenAI call failed: {e}")
             msg = str(e)
             last_err = e
             if "429" in msg or "rate limit" in msg.lower():
@@ -209,28 +168,20 @@ def _safe_chat_completion(client, **kwargs):
                 time.sleep(sleep_s)
                 backoff *= 2
                 continue
-            raise  # non-429, bubble up
-
+            raise
     raise RuntimeError(f"OpenAI call failed after retries: {last_err}")
 
 
-# --- Utilities for article team-detection ---
+# --- Utilities ---
 _WORD_RE_CACHE: dict[str, re.Pattern] = {}
-
 
 def _first_two_paras(body: str) -> str:
     parts = [p.strip() for p in (body or "").split("\n\n") if p.strip()]
     return "\n\n".join(parts[:2])
 
-
 def _count_mentions(text: str) -> dict[str, int]:
-    """
-    Count mentions of each team (by aliases + full name) in the given text.
-    Uses word-ish boundaries; supports hyphenated aliases like 'd-backs'.
-    """
     text = (text or "").lower()
     counts = {t["full"]: 0 for t in TEAMS}
-
     for full, aliases in FULL_TO_ALIASES.items():
         for alias in aliases:
             pat = _WORD_RE_CACHE.get(alias)
@@ -243,7 +194,6 @@ def _count_mentions(text: str) -> dict[str, int]:
                 counts[full] += len(hits)
     return counts
 
-
 def _top_two_teams(title: str, body_first_two_paras: str) -> tuple[str | None, str | None]:
     combined = " ".join([title or "", body_first_two_paras or ""])
     counts = _count_mentions(combined)
@@ -255,9 +205,7 @@ def _top_two_teams(title: str, body_first_two_paras: str) -> tuple[str | None, s
         return ranked[0][0], None
     return None, None
 
-
 def _guess_full_from_name(name: str) -> str | None:
-    """Map schedule/team strings to canonical full name."""
     if not name:
         return None
     n = name.lower()
