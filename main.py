@@ -114,6 +114,13 @@ def main():
             f.write(html)
     else:
         recipients = [e.strip() for e in to.split(",") if e.strip()]
+
+        # Debug SMTP env vars (won't leak password)
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_pass = os.getenv("SMTP_PASS")
+        log.info(f"SMTP_USER set? {'yes' if smtp_user else 'no'}")
+        log.info(f"SMTP_PASS length: {len(smtp_pass) if smtp_pass else 0}")
+
         log.info(f"Sending email to {len(recipients)} recipient(s)…")
         send_email(
             subject=f"MLB Contender Matchups — {target_myt_date.strftime('%a %d %b %Y')} (MYT)",
@@ -121,6 +128,7 @@ def main():
             recipients=recipients
         )
         log.info("Email sent.")
+
 
 
 if __name__ == "__main__":
